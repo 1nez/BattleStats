@@ -1,29 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using System.Xml;
 using System.Xml.Serialization;
 using TaleWorlds.CampaignSystem;
-using TaleWorlds.Core;
-using TaleWorlds.Library;
 using TaleWorlds.Localization;
 
 namespace BattleStats
 {
     public static class SaveLoadRecords
     {
-        private static readonly string folderPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Personal), "Mount and Blade II Bannerlord");
-        private static readonly string path2 = "BattleStats";
+        private static readonly string folderPath =  Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "SavedStats");
         public static string file;
         public static void SaveRecords()
         {
             TextObject name = Hero.MainHero.Name;
-            string _file = Path.Combine(folderPath, path2, (name?.ToString()) + "_BattleStats.xml");
+            string _file = Path.Combine(folderPath, (name?.ToString()) + "_BattleStats.xml");
             file = _file;
             XmlSerializer serializer = new XmlSerializer(typeof(BattleStatsXml));
             XmlWriter writer;
 
-            if (Directory.Exists(Path.Combine(folderPath, path2)))
+            if (Directory.Exists(Path.Combine(folderPath)))
             {
                 Stream output = new FileStream(file, FileMode.Create);
                 writer = XmlWriter.Create(output, new XmlWriterSettings
@@ -35,8 +33,7 @@ namespace BattleStats
             }
             else
             {
-                InformationManager.DisplayMessage(new InformationMessage(new TextObject("New Battle Stats at \\Documents\\Mount and Blade II Bannerlord", null).ToString(), Colors.Blue));
-                Directory.CreateDirectory(Path.Combine(folderPath, path2));
+                Directory.CreateDirectory(Path.Combine(folderPath));
                 Stream output = new FileStream(file, FileMode.Create);
                 writer = XmlWriter.Create(output, new XmlWriterSettings
                 {
@@ -76,18 +73,18 @@ namespace BattleStats
             MenuSetup.sortedArmyRecords.Clear();
             TextObject name = Hero.MainHero.Name;
 
-            if (!Directory.Exists(Path.Combine(folderPath, path2)))
+            if (!Directory.Exists(Path.Combine(folderPath)))
             {
-                Directory.CreateDirectory(Path.Combine(folderPath, path2));
+                Directory.CreateDirectory(Path.Combine(folderPath));
             }
 
-            if (!File.Exists(Path.Combine(folderPath, path2, (name?.ToString()) + "_BattleStats.xml")))
+            if (!File.Exists(Path.Combine(folderPath, (name?.ToString()) + "_BattleStats.xml")))
             {
                 return;
             }
 
             XmlSerializer xmlSerializer = new XmlSerializer(typeof(BattleStatsXml));
-            FileStream fs = new FileStream(Path.Combine(folderPath, path2, (name?.ToString()) + "_BattleStats.xml"), FileMode.Open);
+            FileStream fs = new FileStream(Path.Combine(folderPath, (name?.ToString()) + "_BattleStats.xml"), FileMode.Open);
             BattleStatsXml bsx = (BattleStatsXml)xmlSerializer.Deserialize(fs);
 
             foreach (HeroRecords record in bsx.Clan)
@@ -107,7 +104,7 @@ namespace BattleStats
             }
 
             fs.Close();
-            file = Path.Combine(folderPath, path2, (name?.ToString()) + "_BattleStats.xml");
+            file = Path.Combine(folderPath, (name?.ToString()) + "_BattleStats.xml");
         }
 
         public static void LoadRecords(CampaignGameStarter cgs)

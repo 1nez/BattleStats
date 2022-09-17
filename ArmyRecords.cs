@@ -11,7 +11,6 @@
         public double WB;
         public double CB;
         public int FK;
-        public double FKB;
         public int Battles;
     }
 }

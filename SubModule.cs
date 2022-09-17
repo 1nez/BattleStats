@@ -1,5 +1,6 @@
 ﻿using HarmonyLib;
 using System;
+using System.IO;
 using System.Reflection;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
@@ -11,6 +12,7 @@ namespace BattleStats
     {
         protected override void OnSubModuleLoad()
         {
+            LoadConfig();
             Harmony harmony = new Harmony("jzeno9.battlestats");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
         }
@@ -24,6 +26,14 @@ namespace BattleStats
             }
         }
 
+        private static void LoadConfig()
+        {
+            if (File.ReadAllText(ConfigFile).ToLower().Equals("changetextformat = true"))
+            {
+                MenuSetup.changeFormat = true;
+            }
+        }
+
         protected override void OnApplicationTick(float dt)
         {
             base.OnApplicationTick(dt);
@@ -33,5 +43,7 @@ namespace BattleStats
                 MenuSetup.ShowMenu();
             }
         }
+
+        private static readonly string ConfigFile = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "config.txt");
     }
 }

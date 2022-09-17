@@ -4,12 +4,11 @@ using System.Collections.Generic;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.Core;
-using TaleWorlds.MountAndBlade.ViewModelCollection;
 using TaleWorlds.MountAndBlade.ViewModelCollection.Scoreboard;
 
 namespace BattleStats
 {
-    [HarmonyPatch(typeof(ScoreboardVM))]
+    [HarmonyPatch(typeof(ScoreboardBaseVM))]
     [HarmonyPatch("UpdateQuitText")]
     public class BattleStatsBehavior
     {
@@ -17,7 +16,7 @@ namespace BattleStats
         public static Dictionary<string, ArmyRecords> armyRecords = new Dictionary<string, ArmyRecords>();
 
         [HarmonyPostfix]
-        public static void PostFix(ScoreboardVM __instance)
+        public static void PostFix(ScoreboardBaseVM __instance)
         {
             bool battleIsOver = __instance.IsOver;
 
@@ -27,7 +26,7 @@ namespace BattleStats
             }
         }
 
-        private static void GetStatsFromBattle(ScoreboardVM scoreboard)
+        private static void GetStatsFromBattle(ScoreboardBaseVM scoreboard)
         {
             List<SPScoreboardUnitVM> clanHeroes = new List<SPScoreboardUnitVM>();
             List<SPScoreboardUnitVM> infantry = new List<SPScoreboardUnitVM>();
@@ -193,6 +192,7 @@ namespace BattleStats
             int totalWounded = 0;
             int totalCasualties = 0;
             int friendlyKills;
+
             foreach (KeyValuePair<string, List<SPScoreboardUnitVM>> formation in formations)
             {
                 string formationName = formation.Key;
@@ -279,11 +279,9 @@ namespace BattleStats
             armyRecords["Army Totals"].CB = Math.Round((double)armyRecords["Army Totals"].Casualties / armyRecords["Army Totals"].Battles, 2);
             if (totalCasualties + totalWounded + allyCasualties > enemyKills)
             {
-                friendlyKills = totalCasualties - (enemyKills - allyCasualties);
+                friendlyKills = totalCasualties + totalWounded - (enemyKills - allyCasualties);
                 armyRecords["Army Totals"].FK += friendlyKills;
             }
-
-            armyRecords["Army Totals"].FKB = Math.Round((double)armyRecords["Army Totals"].FK / armyRecords["Army Totals"].Battles, 2);
         }
     }
 }
