@@ -1,4 +1,4 @@
-﻿namespace BattleStats
+namespace BattleStats
 {
     public class HeroRecords
     {
