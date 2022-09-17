@@ -1,0 +1,24 @@
+<Module>
+    <Name value="BattleStats"/>
+    <Id value="BattleStats"/>
+    <Version value="v1.2.4.0"/>
+    <Official value="false" />
+	<DefaultModule value="false" />
+	<SingleplayerModule value="true" />
+	<MultiplayerModule value="false" />
+    <DependedModules>
+		<DependedModule Id="Native"/>
+		<DependedModule Id="SandBoxCore"/>
+		<DependedModule Id="Sandbox"/>
+		<DependedModule Id="StoryMode" />
+        <DependedModule Id="Bannerlord.Harmony" />
+        </DependedModules>
+    <SubModules>
+        <SubModule>
+            <Name value="BattleStats"/>
+            <DLLName value="BattleStats.dll"/>
+            <SubModuleClassType value="BattleStats.SubModule"/>
+        </SubModule>
+    </SubModules>
+    <Xmls/>
+</Module>
