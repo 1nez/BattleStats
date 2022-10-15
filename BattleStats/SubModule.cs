@@ -13,7 +13,7 @@ namespace BattleStats
         protected override void OnSubModuleLoad()
         {
             LoadConfig();
-            Harmony harmony = new Harmony("jzeno9.battlestats");
+            Harmony harmony = new Harmony("onez.battlestats");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
         }
 

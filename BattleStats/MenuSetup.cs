@@ -90,64 +90,8 @@ namespace BattleStats
         private static void ShowMenuPage(int pageNum)
         {
             int recordsCount = sortedHeroRecords.Count + sortedArmyRecords.Count;
-            if (changeFormat == true)
-            {
-                switch (pageNum)
-                {
-                    case 1:
-                        if (recordsCount > 8)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(1), true, true, "Ok", "Next", null, () => ShowMenuPage(2), "", 0f, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(1), true, false, "Ok", "", null, null, "", 0f, null), false);
-                        }
-                        break;
 
-                    case 2:
-
-                        if (recordsCount > 16)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(2), true, true, "Ok", "Next", null, () => ShowMenuPage(3), "", 0f, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(2), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null), false);
-                        }
-
-                        break;
-
-                    case 3:
-
-                        if (recordsCount > 24)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(3), true, true, "Ok", "Next", null, () => ShowMenuPage(4), "", 0f, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(3), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null), false);
-                        }
-                        break;
-
-                    case 4:
-
-                        if (recordsCount > 32)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(4), true, true, "Ok", "Next", null, () => ShowMenuPage(5), "", 0f, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(4), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null), false);
-                        }
-                        break;
-
-                    case 5:
-                        InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(5), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null), false);
-                        break;
-                }
-            }
-            else
+            if (!changeFormat)
             {
                 switch (pageNum)
                 {
@@ -207,6 +151,63 @@ namespace BattleStats
                         break;
                 }
             }
+            else if (changeFormat)
+            {
+                switch (pageNum)
+                {
+                    case 1:
+                        if (recordsCount > 8)
+                        {
+                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(1), true, true, "Ok", "Next", null, () => ShowMenuPage(2), "", 0f, null), false);
+                        }
+                        else
+                        {
+                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(1), true, false, "Ok", "", null, null, "", 0f, null), false);
+                        }
+                        break;
+
+                    case 2:
+
+                        if (recordsCount > 16)
+                        {
+                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(2), true, true, "Ok", "Next", null, () => ShowMenuPage(3), "", 0f, null), false);
+                        }
+                        else
+                        {
+                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(2), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null), false);
+                        }
+
+                        break;
+
+                    case 3:
+
+                        if (recordsCount > 24)
+                        {
+                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(3), true, true, "Ok", "Next", null, () => ShowMenuPage(4), "", 0f, null), false);
+                        }
+                        else
+                        {
+                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(3), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null), false);
+                        }
+                        break;
+
+                    case 4:
+
+                        if (recordsCount > 32)
+                        {
+                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(4), true, true, "Ok", "Next", null, () => ShowMenuPage(5), "", 0f, null), false);
+                        }
+                        else
+                        {
+                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(4), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null), false);
+                        }
+                        break;
+
+                    case 5:
+                        InformationManager.ShowInquiry(new InquiryData("Battle Stats", StatsView(5), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null), false);
+                        break;
+                }
+            }
         }
 
         private static string StatsView(int pageNum)
@@ -216,92 +217,7 @@ namespace BattleStats
             int heroCount = sortedHeroRecords.Count;
             bool showTotals = false;
 
-            if (changeFormat == true)
-            {
-                switch (pageNum)
-                {
-                    case 1:
-                        for (int i = 0; i < 8 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString() +
-                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString() + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString() +
-                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 8)
-                        {
-                            showTotals = true;
-                        }
-                        break;
-
-                    case 2:
-
-                        for (int i = 8; i < 16 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8) + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8) + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString().PadRight(8) +
-                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 16)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 3:
-
-                        for (int i = 16; i < 24 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString() +
-                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString() + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString() +
-                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 24)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 4:
-
-                        for (int i = 24; i < 32 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString() +
-                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString() + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString() +
-                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 32)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 5:
-
-                        for (int i = 32; i < recordsCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString() +
-                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString() + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString() +
-                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        showTotals = true;
-
-                        break;
-                }
-            }
-            else
+            if (!changeFormat)
             {
                 switch (pageNum)
                 {
@@ -381,6 +297,91 @@ namespace BattleStats
                             stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8) + "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
                                 "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8) + "Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString().PadRight(8) +
                                 "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
+                        }
+
+                        showTotals = true;
+
+                        break;
+                }
+            }
+            else if (changeFormat)
+            {
+                switch (pageNum)
+                {
+                    case 1:
+                        for (int i = 0; i < 8 && i < heroCount; i++)
+                        {
+                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
+                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString() +
+                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString() + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString() +
+                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
+                        }
+
+                        if (recordsCount <= 8)
+                        {
+                            showTotals = true;
+                        }
+                        break;
+
+                    case 2:
+
+                        for (int i = 8; i < 16 && i < heroCount; i++)
+                        {
+                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
+                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8) + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
+                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8) + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString().PadRight(8) +
+                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
+                        }
+
+                        if (recordsCount <= 16)
+                        {
+                            showTotals = true;
+                        }
+
+                        break;
+
+                    case 3:
+
+                        for (int i = 16; i < 24 && i < heroCount; i++)
+                        {
+                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
+                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString() +
+                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString() + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString() +
+                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
+                        }
+
+                        if (recordsCount <= 24)
+                        {
+                            showTotals = true;
+                        }
+
+                        break;
+
+                    case 4:
+
+                        for (int i = 24; i < 32 && i < heroCount; i++)
+                        {
+                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
+                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString() +
+                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString() + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString() +
+                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
+                        }
+
+                        if (recordsCount <= 32)
+                        {
+                            showTotals = true;
+                        }
+
+                        break;
+
+                    case 5:
+
+                        for (int i = 32; i < recordsCount; i++)
+                        {
+                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
+                            stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " PR: " + sortedHeroRecords.ElementAt(i).PR.ToString() +
+                                " K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString() + " Wounds: " + sortedHeroRecords.ElementAt(i).Wounds.ToString() +
+                                " Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
                         }
 
                         showTotals = true;
