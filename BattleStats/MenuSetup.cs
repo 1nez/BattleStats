@@ -207,31 +207,32 @@ namespace BattleStats
         {
             int currentPage = ClampPage(pageNum);
             int totalPages = GetTotalPages();
-            string secondaryText = string.Empty;
-            Action secondaryAction = null;
-            bool showSecondary = false;
+            string affirmativeText = "Close";
+            Action affirmativeAction = null;
+            string negativeText = string.Empty;
+            Action negativeAction = null;
+            bool showNegative = false;
 
-            if (currentPage < totalPages)
+            if (totalPages > 1)
             {
-                secondaryText = "Next";
-                secondaryAction = () => ShowMenuPage(currentPage + 1);
-                showSecondary = true;
-            }
-            else if (currentPage > 1)
-            {
-                secondaryText = "Back";
-                secondaryAction = () => ShowMenuPage(currentPage - 1);
-                showSecondary = true;
+                if (currentPage < totalPages)
+                {
+                    negativeText = "Next";
+                    negativeAction = () => ShowMenuPage(currentPage + 1);
+                    showNegative = true;
+                }
+                else
+                {
+                    affirmativeText = "Back";
+                    affirmativeAction = () => ShowMenuPage(1);
+                    negativeText = "Close";
+                    showNegative = true;
+                }
             }
 
             InformationManager.ShowInquiry(
-                new InquiryData("Battle Stats", ViewStats(currentPage), true, showSecondary, "Ok", secondaryText, null, secondaryAction, "", 0f, null, null, null),
+                new InquiryData("Battle Stats", ViewStats(currentPage), true, showNegative, affirmativeText, negativeText, affirmativeAction, negativeAction, "", 0f, null, null, null),
                 false);
-
-            if (changeFormat && currentPage == 1)
-            {
-                openCount++;
-            }
         }
 
         private static string ViewStats(int pageNum)
