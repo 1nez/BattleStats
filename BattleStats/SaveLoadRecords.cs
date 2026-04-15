@@ -141,22 +141,20 @@ namespace BattleStats
             {
                 foreach (HeroRecords record in bsx.Clan)
                 {
-                    if (record.Id == 0 | !MenuSetup.IsClanMember(record.Id))
+                    int resolvedId = ResolveClanHeroRecordId(record);
+                    if (resolvedId == 0)
                     {
-                        Clan clan_ = Hero.MainHero.Clan;
-                        if (clan_ != null)
-                        {
-                            Hero member = clan_.Heroes.Find(c => c.CharacterObject != null && c.Name.ToString() == record.Name);
-                            if (member != null)
-                            {
-                                record.Id = member.CharacterObject.GetHashCode();
-                            }
-                        }
+                        continue;
                     }
 
-                    if (!BattleStatsBehavior.heroRecords.ContainsKey(record.Id) && MenuSetup.IsClanMember(record.Id))
+                    record.Id = resolvedId;
+                    if (!BattleStatsBehavior.heroRecords.ContainsKey(resolvedId))
                     {
-                        BattleStatsBehavior.heroRecords.Add(record.Id, record);
+                        BattleStatsBehavior.heroRecords.Add(resolvedId, record);
+                    }
+                    else
+                    {
+                        MergeHeroRecords(BattleStatsBehavior.heroRecords[resolvedId], record);
                     }
                 }
             }
@@ -165,13 +163,25 @@ namespace BattleStats
             {
                 foreach (ArmyRecords record in bsx.Army)
                 {
-                    if (record.Id == 0)
+                    int resolvedId = StableIds.GetArmyFormationId(record.Name);
+                    if (resolvedId == 0)
                     {
-                        record.Id = record.Name.GetHashCode();
+                        resolvedId = record.Id;
                     }
-                    if (!BattleStatsBehavior.armyRecords.ContainsKey(record.Id))
+
+                    if (resolvedId == 0)
                     {
-                        BattleStatsBehavior.armyRecords.Add(record.Id, record);
+                        continue;
+                    }
+
+                    record.Id = resolvedId;
+                    if (!BattleStatsBehavior.armyRecords.ContainsKey(resolvedId))
+                    {
+                        BattleStatsBehavior.armyRecords.Add(resolvedId, record);
+                    }
+                    else
+                    {
+                        MergeArmyRecords(BattleStatsBehavior.armyRecords[resolvedId], record);
                     }
                 }
             }
@@ -187,6 +197,92 @@ namespace BattleStats
             }
 
             LoadRecords();
+        }
+
+        private static int ResolveClanHeroRecordId(HeroRecords record)
+        {
+            if (record == null)
+            {
+                return 0;
+            }
+
+            if (record.Id != 0 && MenuSetup.IsClanMember(record.Id))
+            {
+                return record.Id;
+            }
+
+            Hero mainHero = Hero.MainHero;
+            Clan clan = mainHero != null ? mainHero.Clan : null;
+            if (clan?.Heroes == null)
+            {
+                return 0;
+            }
+
+            Hero member = clan.Heroes.Find(c => c != null && c.CharacterObject != null && c.Name.ToString() == record.Name);
+            int resolvedId = StableIds.GetHeroId(member);
+            if (resolvedId != 0 && MenuSetup.IsClanMember(resolvedId))
+            {
+                return resolvedId;
+            }
+
+            return 0;
+        }
+
+        private static void MergeHeroRecords(HeroRecords existing, HeroRecords incoming)
+        {
+            if (existing == null || incoming == null)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Name))
+            {
+                existing.Name = incoming.Name;
+            }
+
+            existing.Kills += incoming.Kills;
+            if (existing.PR < incoming.PR)
+            {
+                existing.PR = incoming.PR;
+            }
+
+            existing.Scars += incoming.Scars;
+            existing.Battles += incoming.Battles;
+            if (existing.Battles > 0)
+            {
+                existing.KB = Math.Round((double)existing.Kills / existing.Battles, 2);
+            }
+        }
+
+        private static void MergeArmyRecords(ArmyRecords existing, ArmyRecords incoming)
+        {
+            if (existing == null || incoming == null)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Name))
+            {
+                existing.Name = incoming.Name;
+            }
+
+            existing.Kills += incoming.Kills;
+            if (existing.PR < incoming.PR)
+            {
+                existing.PR = incoming.PR;
+            }
+
+            existing.Wounded += incoming.Wounded;
+            existing.Casualties += incoming.Casualties;
+            existing.FK += incoming.FK;
+            existing.Battles += incoming.Battles;
+
+            if (existing.Battles > 0)
+            {
+                existing.KB = Math.Round((double)existing.Kills / existing.Battles, 2);
+                existing.WB = Math.Round((double)existing.Wounded / existing.Battles, 2);
+                existing.CB = Math.Round((double)existing.Casualties / existing.Battles, 2);
+            }
         }
 
         private static bool TryGetCurrentClanId(out string clanId)

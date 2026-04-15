@@ -65,9 +65,16 @@ namespace BattleStats
 
         public static bool IsClanMember(int id)
         {
-            foreach (Hero hero in Clan.PlayerClan.Heroes)
+            Clan playerClan = Clan.PlayerClan;
+            if (playerClan == null || playerClan.Heroes == null)
             {
-                if (id == hero.CharacterObject.GetHashCode() && hero.IsAlive)
+                return false;
+            }
+
+            foreach (Hero hero in playerClan.Heroes)
+            {
+                int heroId = StableIds.GetHeroId(hero);
+                if (hero.IsAlive && heroId != 0 && id == heroId)
                 {
                     return true;
                 }

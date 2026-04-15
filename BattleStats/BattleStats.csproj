@@ -89,6 +89,7 @@
     <Compile Include="MenuSetup.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SaveLoadRecords.cs" />
+    <Compile Include="StableIds.cs" />
     <Compile Include="SubModule.cs" />
   </ItemGroup>
   <ItemGroup>

@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.Core;
@@ -55,8 +54,8 @@ namespace BattleStats
             "BattleStats_capture.log");
 
         private static readonly string CaptureLogFile = ResolveCaptureLogFile();
-        private static int lastCapturedScoreboardId = -1;
-        private static readonly HashSet<int> seenScoreboardIds = new HashSet<int>();
+        private static ScoreboardBaseVM lastCapturedScoreboard;
+        private static readonly List<ScoreboardBaseVM> seenScoreboards = new List<ScoreboardBaseVM>();
 
         public static void WriteDiagnostic(string message)
         {
@@ -71,8 +70,7 @@ namespace BattleStats
                 return;
             }
 
-            int scoreboardId = RuntimeHelpers.GetHashCode(__instance);
-            bool firstSeen = seenScoreboardIds.Add(scoreboardId);
+            int scoreboardId = GetScoreboardInstanceLabel(__instance, out bool firstSeen);
             if (firstSeen || !string.Equals(source, "Tick", StringComparison.Ordinal))
             {
                 LogCapture("Scoreboard event. Source=" + source +
@@ -83,7 +81,7 @@ namespace BattleStats
                     ", ScoreboardId=" + scoreboardId);
             }
 
-            if (scoreboardId == lastCapturedScoreboardId)
+            if (object.ReferenceEquals(__instance, lastCapturedScoreboard))
             {
                 return;
             }
@@ -109,7 +107,7 @@ namespace BattleStats
             bool captureCompleted = GetStatsFromBattle(__instance);
             if (captureCompleted)
             {
-                lastCapturedScoreboardId = scoreboardId;
+                lastCapturedScoreboard = __instance;
                 LogCapture("Capture completed. Source=" + source + ", ScoreboardId=" + scoreboardId);
             }
             else
@@ -374,6 +372,22 @@ namespace BattleStats
             return side != null && side.Parties != null ? side.Parties.Count : 0;
         }
 
+        private static int GetScoreboardInstanceLabel(ScoreboardBaseVM scoreboard, out bool firstSeen)
+        {
+            for (int i = 0; i < seenScoreboards.Count; i++)
+            {
+                if (object.ReferenceEquals(seenScoreboards[i], scoreboard))
+                {
+                    firstSeen = false;
+                    return i + 1;
+                }
+            }
+
+            seenScoreboards.Add(scoreboard);
+            firstSeen = true;
+            return seenScoreboards.Count;
+        }
+
         private static string ResolveCaptureLogFile()
         {
             try
@@ -439,7 +453,12 @@ namespace BattleStats
         {
             foreach (SPScoreboardUnitVM hero in clanHeros)
             {
-                int heroID = hero.Character.GetHashCode();
+                int heroID = StableIds.GetHeroId(hero.Character);
+                if (heroID == 0)
+                {
+                    continue;
+                }
+
                 HeroRecords newStats = new HeroRecords()
                 {
                     Name = hero.Score.NameText,
@@ -497,7 +516,11 @@ namespace BattleStats
                 int formationKills = 0;
                 int formationWounded = 0;
                 int formationCasualties = 0;
-                int formationID = formationName.GetHashCode();
+                int formationID = StableIds.GetArmyFormationId(formationName);
+                if (formationID == 0)
+                {
+                    continue;
+                }
 
                 foreach (SPScoreboardUnitVM troop in formation.Value)
                 {
@@ -558,7 +581,7 @@ namespace BattleStats
                 }
             }
 
-            int totalsID = "Army Totals".GetHashCode();
+            int totalsID = StableIds.GetArmyTotalsId();
 
             if (totalKills > 0)
             {
