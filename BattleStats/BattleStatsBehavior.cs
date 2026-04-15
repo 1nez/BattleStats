@@ -42,10 +42,13 @@ namespace BattleStats
 
     public class BattleStatsBehavior
     {
+        private const int DefaultMaxTrackedHeroes = 300;
+
         public static readonly bool CaptureLoggingEnabled = false;
         public static Dictionary<int, HeroRecords> heroRecords = new Dictionary<int, HeroRecords>();
         public static Dictionary<int, ArmyRecords> armyRecords = new Dictionary<int, ArmyRecords>();
         public static Dictionary<int, int> statDiff = new Dictionary<int, int>();
+        private static int maxTrackedHeroes = DefaultMaxTrackedHeroes;
 
         private static readonly string CaptureLogFallbackFile = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
@@ -60,6 +63,19 @@ namespace BattleStats
         public static void WriteDiagnostic(string message)
         {
             LogCapture(message);
+        }
+
+        public static int GetMaxTrackedHeroes()
+        {
+            return maxTrackedHeroes;
+        }
+
+        public static void SetMaxTrackedHeroes(int value)
+        {
+            if (value > 0)
+            {
+                maxTrackedHeroes = value;
+            }
         }
 
         public static void HandleScoreboardEvent(ScoreboardBaseVM __instance, string source)
@@ -470,35 +486,32 @@ namespace BattleStats
                     Id = heroID
                 };
 
-                if (newStats.Kills > 0)
+                if (heroRecords.ContainsKey(heroID))
                 {
-                    statDiff[heroID] = newStats.Kills;
+                    heroRecords[heroID].Name = newStats.Name;
+
+                    heroRecords[heroID].Kills += newStats.Kills;
+                    if (heroRecords[heroID].PR < newStats.Kills)
+                    {
+                        heroRecords[heroID].PR = newStats.Kills;
+                    }
+
+                    heroRecords[heroID].Scars += newStats.Scars;
+                    heroRecords[heroID].Battles++;
+                    heroRecords[heroID].KB = Math.Round((double)heroRecords[heroID].Kills / heroRecords[heroID].Battles, 2);
                 }
-
-                if (!heroRecords.IsEmpty())
+                else if (heroRecords.Count < GetMaxTrackedHeroes())
                 {
-                    if (heroRecords.ContainsKey(heroID))
-                    {
-                        heroRecords[heroID].Name = newStats.Name;
-
-                        heroRecords[heroID].Kills += newStats.Kills;
-                        if (heroRecords[heroID].PR < newStats.Kills)
-                        {
-                            heroRecords[heroID].PR = newStats.Kills;
-                        }
-
-                        heroRecords[heroID].Scars += newStats.Scars;
-                        heroRecords[heroID].Battles++;
-                        heroRecords[heroID].KB = Math.Round((double)heroRecords[heroID].Kills / heroRecords[heroID].Battles, 2);
-                    }
-                    else
-                    {
-                        heroRecords.Add(heroID, newStats);
-                    }
+                    heroRecords.Add(heroID, newStats);
                 }
                 else
                 {
-                    heroRecords.Add(heroID, newStats);
+                    continue;
+                }
+
+                if (newStats.Kills > 0)
+                {
+                    statDiff[heroID] = newStats.Kills;
                 }
             }
         }

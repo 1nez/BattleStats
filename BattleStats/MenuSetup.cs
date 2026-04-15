@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security;
+using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.InputSystem;
@@ -16,6 +17,13 @@ namespace BattleStats
         public static bool changeFormat;
         public static InputKey hotkey = (InputKey)39;
         public static int openCount = 0;
+
+        private sealed class DisplayRow
+        {
+            public bool IsHero { get; set; }
+            public HeroRecords Hero { get; set; }
+            public ArmyRecords Army { get; set; }
+        }
 
         public static void ShowMenu()
         {
@@ -45,7 +53,7 @@ namespace BattleStats
                 BattleStatsBehavior.heroRecords.Clear();
                 BattleStatsBehavior.armyRecords.Clear();
             }
-            else if (gameStarted && (Input.IsKeyPressed(hotkey)))
+            else if (gameStarted && Input.IsKeyPressed(hotkey))
             {
                 if (!BattleStatsBehavior.statDiff.IsEmpty())
                 {
@@ -57,6 +65,7 @@ namespace BattleStats
                     BattleStatsBehavior.statDiff.Clear();
                     openCount = 0;
                 }
+
                 RemoveNonClanMembers();
                 SortRecordsByKills();
                 ShowMenuPage(1);
@@ -87,8 +96,8 @@ namespace BattleStats
         {
             if (!BattleStatsBehavior.heroRecords.IsEmpty())
             {
-                var herosToRemove = BattleStatsBehavior.heroRecords.Where(x => !IsClanMember(x.Key)).ToList();
-                foreach (var hero in herosToRemove)
+                List<KeyValuePair<int, HeroRecords>> heroesToRemove = BattleStatsBehavior.heroRecords.Where(x => !IsClanMember(x.Key)).ToList();
+                foreach (KeyValuePair<int, HeroRecords> hero in heroesToRemove)
                 {
                     BattleStatsBehavior.heroRecords.Remove(hero.Key);
                 }
@@ -97,467 +106,217 @@ namespace BattleStats
 
         public static void SortRecordsByKills()
         {
-            if (!BattleStatsBehavior.heroRecords.IsEmpty())
+            sortedHeroRecords = BattleStatsBehavior.heroRecords.IsEmpty()
+                ? new List<HeroRecords>()
+                : BattleStatsBehavior.heroRecords.Values.ToList();
+            sortedHeroRecords.Sort((x, y) => y.Kills.CompareTo(x.Kills));
+
+            sortedArmyRecords = new List<ArmyRecords>();
+            if (BattleStatsBehavior.armyRecords.IsEmpty())
             {
-                Dictionary<int, HeroRecords>.ValueCollection heroRecords = BattleStatsBehavior.heroRecords.Values;
-                sortedHeroRecords = heroRecords.ToList();
-                sortedHeroRecords.Sort((x, y) => y.Kills.CompareTo(x.Kills));
+                return;
             }
 
-            if (!BattleStatsBehavior.armyRecords.IsEmpty())
-            {
-                sortedArmyRecords = new List<ArmyRecords>();
-                List<ArmyRecords> tempArmyRecords = new List<ArmyRecords>();
-                Dictionary<int, ArmyRecords>.ValueCollection armyRecords = BattleStatsBehavior.armyRecords.Values;
-                tempArmyRecords = armyRecords.ToList();
-                tempArmyRecords.Sort((x, y) => y.Kills.CompareTo(x.Kills));
+            List<ArmyRecords> tempArmyRecords = BattleStatsBehavior.armyRecords.Values.ToList();
+            tempArmyRecords.Sort((x, y) => y.Kills.CompareTo(x.Kills));
 
-                for (int i = 0; i < tempArmyRecords.Count; i++)
+            ArmyRecords totalsRecord = null;
+            for (int i = 0; i < tempArmyRecords.Count; i++)
+            {
+                ArmyRecords record = tempArmyRecords[i];
+                if (record == null)
                 {
-                    if (!tempArmyRecords.ElementAt(i).Name.Equals("Army Totals"))
-                    {
-                        sortedArmyRecords.Add(tempArmyRecords.ElementAt(i));
-                    }
+                    continue;
                 }
 
-                sortedArmyRecords.Add(tempArmyRecords.Find(x => x.Name.Equals("Army Totals")));
+                if (record.Name != null && record.Name.Equals("Army Totals"))
+                {
+                    totalsRecord = record;
+                }
+                else
+                {
+                    sortedArmyRecords.Add(record);
+                }
             }
+
+            if (totalsRecord != null)
+            {
+                sortedArmyRecords.Add(totalsRecord);
+            }
+        }
+
+        private static int GetRowsPerPage()
+        {
+            return changeFormat ? 8 : 10;
+        }
+
+        private static int GetTotalRecordCount()
+        {
+            return sortedHeroRecords.Count + sortedArmyRecords.Count;
+        }
+
+        private static int GetTotalPages()
+        {
+            int rowsPerPage = GetRowsPerPage();
+            int totalRecords = GetTotalRecordCount();
+            return Math.Max(1, (totalRecords + rowsPerPage - 1) / rowsPerPage);
+        }
+
+        private static int ClampPage(int pageNum)
+        {
+            int totalPages = GetTotalPages();
+            if (pageNum < 1)
+            {
+                return 1;
+            }
+
+            if (pageNum > totalPages)
+            {
+                return totalPages;
+            }
+
+            return pageNum;
+        }
+
+        private static List<DisplayRow> BuildDisplayRows()
+        {
+            List<DisplayRow> rows = new List<DisplayRow>(GetTotalRecordCount());
+
+            for (int i = 0; i < sortedHeroRecords.Count; i++)
+            {
+                rows.Add(new DisplayRow
+                {
+                    IsHero = true,
+                    Hero = sortedHeroRecords[i]
+                });
+            }
+
+            for (int i = 0; i < sortedArmyRecords.Count; i++)
+            {
+                rows.Add(new DisplayRow
+                {
+                    IsHero = false,
+                    Army = sortedArmyRecords[i]
+                });
+            }
+
+            return rows;
         }
 
         private static void ShowMenuPage(int pageNum)
         {
-            int recordsCount = sortedHeroRecords.Count + sortedArmyRecords.Count;
+            int currentPage = ClampPage(pageNum);
+            int totalPages = GetTotalPages();
+            string secondaryText = string.Empty;
+            Action secondaryAction = null;
+            bool showSecondary = false;
 
-            if (!changeFormat)
+            if (currentPage < totalPages)
             {
-                switch (pageNum)
-                {
-                    case 1:
-                        if (recordsCount > 10)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(1), true, true, "Ok", "Next", null, () => ShowMenuPage(2), "", 0f, null, null, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(1), true, false, "Ok", "", null, null, "", 0f, null, null, null), false);
-                        }
-
-                        break;
-
-                    case 2:
-
-                        if (recordsCount > 20)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(2), true, true, "Ok", "Next", null, () => ShowMenuPage(3), "", 0f, null, null, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(2), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null, null, null), false);
-                        }
-
-                        break;
-
-                    case 3:
-
-                        if (recordsCount > 30)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(3), true, true, "Ok", "Next", null, () => ShowMenuPage(4), "", 0f, null, null, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(3), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null, null, null), false);
-                        }
-
-                        break;
-
-                    case 4:
-
-                        if (recordsCount > 40)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(4), true, true, "Ok", "Next", null, () => ShowMenuPage(5), "", 0f, null, null, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(4), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null, null, null), false);
-                        }
-
-                        break;
-
-                    case 5:
-                        InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(5), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null, null, null), false);
-                        break;
-                }
+                secondaryText = "Next";
+                secondaryAction = () => ShowMenuPage(currentPage + 1);
+                showSecondary = true;
             }
-            else if (changeFormat)
+            else if (currentPage > 1)
             {
-                switch (pageNum)
-                {
-                    case 1:
-                        if (recordsCount > 8)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(1), true, true, "Ok", "Next", null, () => ShowMenuPage(2), "", 0f, null, null, null), false);
-                            openCount++;
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(1), true, false, "Ok", "", null, null, "", 0f, null, null, null), false);
-                            openCount++;
-                        }
-                        break;
+                secondaryText = "Back";
+                secondaryAction = () => ShowMenuPage(currentPage - 1);
+                showSecondary = true;
+            }
 
-                    case 2:
+            InformationManager.ShowInquiry(
+                new InquiryData("Battle Stats", ViewStats(currentPage), true, showSecondary, "Ok", secondaryText, null, secondaryAction, "", 0f, null, null, null),
+                false);
 
-                        if (recordsCount > 16)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(2), true, true, "Ok", "Next", null, () => ShowMenuPage(3), "", 0f, null, null, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(2), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null, null, null), false);
-                        }
-
-                        break;
-
-                    case 3:
-
-                        if (recordsCount > 24)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(3), true, true, "Ok", "Next", null, () => ShowMenuPage(4), "", 0f, null, null, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(3), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null, null, null), false);
-                        }
-                        break;
-
-                    case 4:
-
-                        if (recordsCount > 32)
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(4), true, true, "Ok", "Next", null, () => ShowMenuPage(5), "", 0f, null, null, null), false);
-                        }
-                        else
-                        {
-                            InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(4), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null, null, null), false);
-                        }
-                        break;
-
-                    case 5:
-                        InformationManager.ShowInquiry(new InquiryData("Battle Stats", ViewStats(5), true, true, "Ok", "Back", null, () => ShowMenuPage(1), "", 0f, null, null, null), false);
-                        break;
-                }
+            if (changeFormat && currentPage == 1)
+            {
+                openCount++;
             }
         }
 
         private static string ViewStats(int pageNum)
         {
-            String stats = String.Empty;
-            int recordsCount = sortedHeroRecords.Count + sortedArmyRecords.Count;
-            int heroCount = sortedHeroRecords.Count;
-            bool showTotals = false;
-
-            if (!changeFormat)
+            List<DisplayRow> allRows = BuildDisplayRows();
+            if (allRows.Count == 0)
             {
-                switch (pageNum)
-                {
-                    case 1:
-
-                        for (int i = 0; i < 10 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 10)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 2:
-
-                        for (int i = 10; i < 20 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 20)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 3:
-
-                        for (int i = 20; i < 30 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 30)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 4:
-
-                        for (int i = 30; i < 40 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 40)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 5:
-
-                        for (int i = 40; i < recordsCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        showTotals = true;
-
-                        break;
-                }
+                return "No battle stats recorded yet.";
             }
-            else if (changeFormat)
+
+            int rowsPerPage = GetRowsPerPage();
+            int currentPage = ClampPage(pageNum);
+            int startIndex = (currentPage - 1) * rowsPerPage;
+            int endIndex = Math.Min(startIndex + rowsPerPage, allRows.Count);
+            StringBuilder stats = new StringBuilder();
+
+            for (int i = startIndex; i < endIndex; i++)
             {
-                switch (pageNum)
+                DisplayRow row = allRows[i];
+                if (row.IsHero && row.Hero != null)
                 {
-                    case 1:
-                        for (int i = 0; i < 8 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 8)
-                        {
-                            showTotals = true;
-                        }
-                        break;
-
-                    case 2:
-
-                        for (int i = 8; i < 16 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 16)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 3:
-
-                        for (int i = 16; i < 24 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 24)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 4:
-
-                        for (int i = 24; i < 32 && i < heroCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        if (recordsCount <= 32)
-                        {
-                            showTotals = true;
-                        }
-
-                        break;
-
-                    case 5:
-
-                        for (int i = 32; i < recordsCount; i++)
-                        {
-                            stats += "[" + sortedHeroRecords.ElementAt(i).Name + "]\n";
-                            if (BattleStatsBehavior.statDiff.ContainsKey(sortedHeroRecords.ElementAt(i).Id) && !BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].Equals(0))
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString() + " +" + BattleStatsBehavior.statDiff[sortedHeroRecords.ElementAt(i).Id].ToString().PadRight(8);
-                            }
-                            else
-                            {
-                                stats += "Kills: " + sortedHeroRecords.ElementAt(i).Kills.ToString().PadRight(8);
-                            }
-
-                            stats += "PR: " + sortedHeroRecords.ElementAt(i).PR.ToString().PadRight(8) +
-                                "K/B: " + sortedHeroRecords.ElementAt(i).KB.ToString().PadRight(8);
-                            stats += "Scars: " + sortedHeroRecords.ElementAt(i).Scars.ToString().PadRight(8);
-                            stats += "Battles: " + sortedHeroRecords.ElementAt(i).Battles.ToString() + "\n";
-                        }
-
-                        showTotals = true;
-
-                        break;
+                    stats.Append(FormatHeroRow(row.Hero));
+                }
+                else if (!row.IsHero && row.Army != null)
+                {
+                    stats.Append(FormatArmyRow(row.Army));
                 }
             }
 
-            if (showTotals)
-            {
-                if (!sortedArmyRecords.IsEmpty())
-                {
-                    foreach (ArmyRecords formation in sortedArmyRecords)
-                    {
-                        stats += "[" + formation.Name + "]\n";
-                        if (BattleStatsBehavior.statDiff.ContainsKey(formation.Id) && !BattleStatsBehavior.statDiff[formation.Id].Equals(0))
-                        {
-                            stats += "K: " + formation.Kills.ToString() + " +" + BattleStatsBehavior.statDiff[formation.Id].ToString();
-                        }
-                        else
-                        {
-                            stats += "K: " + formation.Kills.ToString();
-                        }
-                        stats += "  PR: " + formation.PR.ToString()
-                            + "  K/B: " + formation.KB.ToString() + "  W/B: " + formation.WB.ToString()
-                            + "  C/B: " + formation.CB.ToString();
+            return stats.Length > 0 ? stats.ToString() : "No battle stats recorded yet.";
+        }
 
-                        if (formation.Name.Equals("Army Totals"))
-                        {
-                            stats += "  FK: " + formation.FK;
-                        }
-                        stats += "  B: " + formation.Battles.ToString() + "\n";
-                    }
-                }
+        private static string FormatHeroRow(HeroRecords hero)
+        {
+            StringBuilder stats = new StringBuilder();
+            int killDiff = 0;
+            bool hasDiff = BattleStatsBehavior.statDiff.TryGetValue(hero.Id, out killDiff) && !killDiff.Equals(0);
+
+            stats.Append('[').Append(hero.Name).Append("]\n");
+            if (hasDiff)
+            {
+                stats.Append("Kills: ").Append(hero.Kills).Append(" +").Append(killDiff.ToString().PadRight(8));
             }
-            return stats;
+            else
+            {
+                stats.Append("Kills: ").Append(hero.Kills.ToString().PadRight(8));
+            }
+
+            stats.Append("PR: ").Append(hero.PR.ToString().PadRight(8))
+                .Append("K/B: ").Append(hero.KB.ToString().PadRight(8))
+                .Append("Scars: ").Append(hero.Scars.ToString().PadRight(8))
+                .Append("Battles: ").Append(hero.Battles)
+                .Append('\n');
+
+            return stats.ToString();
+        }
+
+        private static string FormatArmyRow(ArmyRecords army)
+        {
+            StringBuilder stats = new StringBuilder();
+            int killDiff = 0;
+            bool hasDiff = BattleStatsBehavior.statDiff.TryGetValue(army.Id, out killDiff) && !killDiff.Equals(0);
+
+            stats.Append('[').Append(army.Name).Append("]\n");
+            if (hasDiff)
+            {
+                stats.Append("K: ").Append(army.Kills).Append(" +").Append(killDiff);
+            }
+            else
+            {
+                stats.Append("K: ").Append(army.Kills);
+            }
+
+            stats.Append("  PR: ").Append(army.PR)
+                .Append("  K/B: ").Append(army.KB)
+                .Append("  W/B: ").Append(army.WB)
+                .Append("  C/B: ").Append(army.CB);
+
+            if (army.Name != null && army.Name.Equals("Army Totals"))
+            {
+                stats.Append("  FK: ").Append(army.FK);
+            }
+
+            stats.Append("  B: ").Append(army.Battles).Append('\n');
+            return stats.ToString();
         }
     }
 }
-

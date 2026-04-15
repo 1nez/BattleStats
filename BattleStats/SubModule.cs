@@ -97,6 +97,12 @@ namespace BattleStats
                         {
                             MenuSetup.changeFormat = changeTextFormat;
                         }
+                        else if (setting.Equals("maxtrackedheroes", StringComparison.OrdinalIgnoreCase) &&
+                                 int.TryParse(value, out int maxTrackedHeroes) &&
+                                 maxTrackedHeroes > 0)
+                        {
+                            BattleStatsBehavior.SetMaxTrackedHeroes(maxTrackedHeroes);
+                        }
                     }
                 }
             }
