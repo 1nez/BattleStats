@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Security;
 using System.Xml;
 using System.Xml.Serialization;
 using TaleWorlds.CampaignSystem;
@@ -11,20 +12,23 @@ namespace BattleStats
 {
     public static class SaveLoadRecords
     {
-        private static readonly string folderPath = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "SavedStats");
+        private static readonly string folderPath = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? AppDomain.CurrentDomain.BaseDirectory, "SavedStats");
         public static string file;
 
         public static void SaveRecords()
         {
-            TextObject clan = Hero.MainHero.Clan.InformalName;
-            file = Path.Combine(folderPath, clan.ToString() + "_BattleStats.xml");
-            XmlSerializer serializer = new XmlSerializer(typeof(BattleStatsXml));
-
-            if (!Directory.Exists(folderPath))
+            if (!TryGetCurrentClanId(out string clanId))
             {
-                Directory.CreateDirectory(folderPath);
+                return;
             }
 
+            file = Path.Combine(folderPath, clanId + "_BattleStats.xml");
+            if (!EnsureStatsDirectory())
+            {
+                return;
+            }
+
+            XmlSerializer serializer = new XmlSerializer(typeof(BattleStatsXml));
             BattleStatsXml bsx = new BattleStatsXml
             {
                 Clan = new List<HeroRecords>(),
@@ -43,15 +47,27 @@ namespace BattleStats
                 bsx.Army.Add(formation);
             }
 
-            using (Stream output = new FileStream(file, FileMode.Create))
-            using (XmlWriter writer = XmlWriter.Create(output, new XmlWriterSettings
+            try
             {
-                Indent = true,
-                IndentChars = "\t",
-                OmitXmlDeclaration = true
-            }))
+                using (Stream output = new FileStream(file, FileMode.Create))
+                using (XmlWriter writer = XmlWriter.Create(output, new XmlWriterSettings
+                {
+                    Indent = true,
+                    IndentChars = "\t",
+                    OmitXmlDeclaration = true
+                }))
+                {
+                    serializer.Serialize(writer, bsx);
+                }
+            }
+            catch (IOException)
             {
-                serializer.Serialize(writer, bsx);
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (SecurityException)
+            {
             }
         }
 
@@ -64,24 +80,29 @@ namespace BattleStats
             MenuSetup.sortedArmyRecords.Clear();
             MenuSetup.openCount = 0;
 
-            TextObject clan = Hero.MainHero.Clan.InformalName;
-            string id = clan.ToString();
-
-            if (!Directory.Exists(folderPath))
+            if (!TryGetCurrentClanId(out string id))
             {
-                Directory.CreateDirectory(folderPath);
+                return;
+            }
+
+            if (!EnsureStatsDirectory())
+            {
+                return;
             }
 
             string statsFilePath = Path.Combine(folderPath, id + "_BattleStats.xml");
             if (!File.Exists(statsFilePath))
             {
-                TextObject name = Hero.MainHero.Name;
-                string fileName = name?.ToString() + "_BattleStats.xml";
-                string filePath = Path.Combine(folderPath, fileName);
+                string nameId = Hero.MainHero?.Name?.ToString();
+                if (string.IsNullOrWhiteSpace(nameId))
+                {
+                    return;
+                }
 
+                string filePath = Path.Combine(folderPath, nameId + "_BattleStats.xml");
                 if (File.Exists(filePath))
                 {
-                    id = name?.ToString();
+                    id = nameId;
                     statsFilePath = Path.Combine(folderPath, id + "_BattleStats.xml");
                 }
                 else
@@ -104,6 +125,10 @@ namespace BattleStats
                 return;
             }
             catch (UnauthorizedAccessException)
+            {
+                return;
+            }
+            catch (SecurityException)
             {
                 return;
             }
@@ -151,7 +176,6 @@ namespace BattleStats
                 }
             }
 
-            id = clan.ToString();
             file = Path.Combine(folderPath, id + "_BattleStats.xml");
         }
 
@@ -163,6 +187,37 @@ namespace BattleStats
             }
 
             LoadRecords();
+        }
+
+        private static bool TryGetCurrentClanId(out string clanId)
+        {
+            clanId = Hero.MainHero?.Clan?.InformalName?.ToString();
+            return !string.IsNullOrWhiteSpace(clanId);
+        }
+
+        private static bool EnsureStatsDirectory()
+        {
+            try
+            {
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+                return true;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
+            }
+            catch (SecurityException)
+            {
+                return false;
+            }
         }
     }
 }

@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
 using TaleWorlds.InputSystem;
@@ -32,6 +33,9 @@ namespace BattleStats
                     {
                     }
                     catch (UnauthorizedAccessException)
+                    {
+                    }
+                    catch (SecurityException)
                     {
                     }
                 }
@@ -549,3 +553,4 @@ namespace BattleStats
         }
     }
 }
+
