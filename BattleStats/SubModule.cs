@@ -1,6 +1,7 @@
 ﻿using HarmonyLib;
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
@@ -16,6 +17,28 @@ namespace BattleStats
             LoadConfig();
             Harmony harmony = new Harmony("onez.battlestats");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
+
+            if (BattleStatsBehavior.CaptureLoggingEnabled)
+            {
+                BattleStatsBehavior.WriteDiagnostic("SubModule load start.");
+                BattleStatsBehavior.WriteDiagnostic("Harmony patch applied.");
+                try
+                {
+                    var patchedScoreboardMethods = Harmony.GetAllPatchedMethods()
+                        .Where(m => m.DeclaringType == typeof(TaleWorlds.MountAndBlade.ViewModelCollection.Scoreboard.ScoreboardBaseVM))
+                        .Where(m => m.Name == "Tick" || m.Name == "OnFinalize" || m.Name == "UpdateQuitText")
+                        .Select(m => m.Name)
+                        .Distinct()
+                        .OrderBy(n => n)
+                        .ToArray();
+
+                    BattleStatsBehavior.WriteDiagnostic("Patched ScoreboardBaseVM methods: " + string.Join(", ", patchedScoreboardMethods));
+                }
+                catch (Exception ex)
+                {
+                    BattleStatsBehavior.WriteDiagnostic("Failed to inspect patched methods: " + ex.GetType().Name);
+                }
+            }
         }
 
         protected override void OnGameStart(Game game, IGameStarter gameStarterObject)

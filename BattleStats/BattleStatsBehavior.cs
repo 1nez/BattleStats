@@ -1,6 +1,9 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.Core;
@@ -8,28 +11,114 @@ using TaleWorlds.MountAndBlade.ViewModelCollection.Scoreboard;
 
 namespace BattleStats
 {
-    [HarmonyPatch(typeof(ScoreboardBaseVM))]
-    [HarmonyPatch("UpdateQuitText")]
+    [HarmonyPatch(typeof(ScoreboardBaseVM), "UpdateQuitText")]
+    public static class BattleStatsPatch_UpdateQuitText
+    {
+        [HarmonyPostfix]
+        public static void PostFix(ScoreboardBaseVM __instance)
+        {
+            BattleStatsBehavior.HandleScoreboardEvent(__instance, "UpdateQuitText");
+        }
+    }
+
+    [HarmonyPatch(typeof(ScoreboardBaseVM), "OnFinalize")]
+    public static class BattleStatsPatch_OnFinalize
+    {
+        [HarmonyPostfix]
+        public static void PostFix(ScoreboardBaseVM __instance)
+        {
+            BattleStatsBehavior.HandleScoreboardEvent(__instance, "OnFinalize");
+        }
+    }
+
+    [HarmonyPatch(typeof(ScoreboardBaseVM), "Tick")]
+    public static class BattleStatsPatch_Tick
+    {
+        [HarmonyPostfix]
+        public static void PostFix(ScoreboardBaseVM __instance)
+        {
+            BattleStatsBehavior.HandleScoreboardEvent(__instance, "Tick");
+        }
+    }
+
     public class BattleStatsBehavior
     {
+        public static readonly bool CaptureLoggingEnabled = false;
         public static Dictionary<int, HeroRecords> heroRecords = new Dictionary<int, HeroRecords>();
         public static Dictionary<int, ArmyRecords> armyRecords = new Dictionary<int, ArmyRecords>();
         public static Dictionary<int, int> statDiff = new Dictionary<int, int>();
 
-        [HarmonyPostfix]
-        public static void PostFix(ScoreboardBaseVM __instance)
-        {
-            bool battleIsOver = __instance.IsOver;
+        private static readonly string CaptureLogFallbackFile = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+            "Mount and Blade II Bannerlord",
+            "Configs",
+            "BattleStats_capture.log");
 
-            if (battleIsOver)
+        private static readonly string CaptureLogFile = ResolveCaptureLogFile();
+        private static int lastCapturedScoreboardId = -1;
+        private static readonly HashSet<int> seenScoreboardIds = new HashSet<int>();
+
+        public static void WriteDiagnostic(string message)
+        {
+            LogCapture(message);
+        }
+
+        public static void HandleScoreboardEvent(ScoreboardBaseVM __instance, string source)
+        {
+            if (__instance == null)
             {
-                statDiff.Clear();
-                MenuSetup.openCount = 0;
-                GetStatsFromBattle(__instance);
+                LogCapture("Scoreboard event fired with null instance. Source=" + source);
+                return;
+            }
+
+            int scoreboardId = RuntimeHelpers.GetHashCode(__instance);
+            bool firstSeen = seenScoreboardIds.Add(scoreboardId);
+            if (firstSeen || !string.Equals(source, "Tick", StringComparison.Ordinal))
+            {
+                LogCapture("Scoreboard event. Source=" + source +
+                    ", IsOver=" + __instance.IsOver +
+                    ", ShowScoreboard=" + __instance.ShowScoreboard +
+                    ", AttackerParties=" + GetPartyCount(__instance.Attackers) +
+                    ", DefenderParties=" + GetPartyCount(__instance.Defenders) +
+                    ", ScoreboardId=" + scoreboardId);
+            }
+
+            if (scoreboardId == lastCapturedScoreboardId)
+            {
+                return;
+            }
+
+            bool readyToCapture = __instance.IsOver ||
+                string.Equals(source, "UpdateQuitText", StringComparison.Ordinal) ||
+                string.Equals(source, "OnFinalize", StringComparison.Ordinal);
+
+            if (!readyToCapture)
+            {
+                if (firstSeen)
+                {
+                    LogCapture("Capture deferred. Scoreboard not ready yet for ScoreboardId=" + scoreboardId);
+                }
+
+                return;
+            }
+
+            statDiff.Clear();
+            MenuSetup.openCount = 0;
+
+            LogCapture("Capture starting. Source=" + source + ", ScoreboardId=" + scoreboardId);
+            bool captureCompleted = GetStatsFromBattle(__instance);
+            if (captureCompleted)
+            {
+                lastCapturedScoreboardId = scoreboardId;
+                LogCapture("Capture completed. Source=" + source + ", ScoreboardId=" + scoreboardId);
+            }
+            else
+            {
+                LogCapture("Capture failed. Source=" + source + ", ScoreboardId=" + scoreboardId);
             }
         }
 
-        private static void GetStatsFromBattle(ScoreboardBaseVM scoreboard)
+        private static bool GetStatsFromBattle(ScoreboardBaseVM scoreboard)
         {
             List<SPScoreboardUnitVM> clanHeroes = new List<SPScoreboardUnitVM>();
             List<SPScoreboardUnitVM> infantry = new List<SPScoreboardUnitVM>();
@@ -40,85 +129,73 @@ namespace BattleStats
             int enemyKills = 0;
             int allyCasualties = 0;
 
-            if (PartyBase.MainParty.Side.ToString().Equals("Attacker"))
+            SPScoreboardSideVM playerSideVm;
+            SPScoreboardSideVM enemySideVm;
+            BattleSideEnum playerSide;
+            if (!TryResolveScoreboardSides(scoreboard, out playerSideVm, out enemySideVm, out playerSide))
             {
-                foreach (SPScoreboardPartyVM party in scoreboard.Attackers.Parties)
-                {
-                    if (party.BattleCombatant.Banner == Hero.MainHero.ClanBanner)
-                    {
-                        foreach (SPScoreboardUnitVM troop in party.Members)
-                        {
-                            if (troop.IsHero)
-                            {
-                                clanHeroes.Add(troop);
-                            }
-                            else
-                            {
-                                if (troop.Character.IsMounted && troop.Character.IsRanged)
-                                {
-                                    horseArchers.Add(troop);
-                                }
-                                else if (troop.Character.IsMounted && !troop.Character.IsRanged)
-                                {
-                                    cavalry.Add(troop);
-                                }
-                                else if (troop.Character.IsRanged && !troop.Character.IsMounted)
-                                {
-                                    ranged.Add(troop);
-                                }
-                                else if (troop.Character.IsInfantry)
-                                {
-                                    infantry.Add(troop);
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        allyCasualties += party.Score.Dead + party.Score.Wounded;
-                    }
-                }
-                enemyKills = scoreboard.Defenders.Score.Kill;
+                LogCapture("Capture aborted: player side unresolved.");
+                return false;
             }
-            else if (PartyBase.MainParty.Side.ToString().Equals("Defender"))
+
+            int sidePartyCount = (playerSideVm != null && playerSideVm.Parties != null) ? playerSideVm.Parties.Count : 0;
+            LogCapture("PlayerSide=" + playerSide + ", SidePartyCount=" + sidePartyCount);
+
+            SPScoreboardPartyVM playerParty;
+            if (playerSideVm == null || playerSideVm.Parties == null || !TryGetPlayerScoreboardParty(playerSideVm.Parties, out playerParty))
             {
-                foreach (SPScoreboardPartyVM party in scoreboard.Defenders.Parties)
+                LogCapture("Capture aborted: player scoreboard party not found.");
+                return false;
+            }
+
+            enemyKills = (enemySideVm != null && enemySideVm.Score != null) ? enemySideVm.Score.Kill : 0;
+
+            foreach (SPScoreboardPartyVM party in playerSideVm.Parties)
+            {
+                if (party == null || object.ReferenceEquals(party, playerParty) || party.Score == null)
                 {
-                    if (party.BattleCombatant.Banner == Hero.MainHero.ClanBanner)
+                    continue;
+                }
+
+                allyCasualties += party.Score.Dead + party.Score.Wounded;
+            }
+
+            int playerPartyMemberCount = playerParty.Members != null ? playerParty.Members.Count : 0;
+            LogCapture("PlayerPartyFound=true, MemberCount=" + playerPartyMemberCount + ", EnemyKills=" + enemyKills + ", AllyCasualties=" + allyCasualties);
+
+            if (playerParty.Members != null)
+            {
+                foreach (SPScoreboardUnitVM troop in playerParty.Members)
+                {
+                    if (troop == null)
                     {
-                        foreach (SPScoreboardUnitVM troop in party.Members)
+                        continue;
+                    }
+
+                    if (troop.IsHero)
+                    {
+                        clanHeroes.Add(troop);
+                    }
+                    else if (troop.Character != null)
+                    {
+                        if (troop.Character.IsMounted && troop.Character.IsRanged)
                         {
-                            if (troop.IsHero)
-                            {
-                                clanHeroes.Add(troop);
-                            }
-                            else
-                            {
-                                if (troop.Character.IsMounted && troop.Character.IsRanged)
-                                {
-                                    horseArchers.Add(troop);
-                                }
-                                else if (troop.Character.IsMounted && !troop.Character.IsRanged)
-                                {
-                                    cavalry.Add(troop);
-                                }
-                                else if (troop.Character.IsRanged && !troop.Character.IsMounted)
-                                {
-                                    ranged.Add(troop);
-                                }
-                                else if (troop.Character.IsInfantry)
-                                {
-                                    infantry.Add(troop);
-                                }
-                            }
+                            horseArchers.Add(troop);
+                        }
+                        else if (troop.Character.IsMounted && !troop.Character.IsRanged)
+                        {
+                            cavalry.Add(troop);
+                        }
+                        else if (troop.Character.IsRanged && !troop.Character.IsMounted)
+                        {
+                            ranged.Add(troop);
+                        }
+                        else if (troop.Character.IsInfantry)
+                        {
+                            infantry.Add(troop);
                         }
                     }
-                    else
-                    {
-                        allyCasualties += party.Score.Dead + party.Score.Wounded;
-                    }
                 }
-                enemyKills = scoreboard.Attackers.Score.Kill;
             }
 
             if (!infantry.IsEmpty())
@@ -138,13 +215,223 @@ namespace BattleStats
                 formations.Add("Horse Archers", horseArchers);
             }
 
+            bool heroRecordsUpdated = false;
+            bool armyRecordsUpdated = false;
+
             if (!clanHeroes.IsEmpty())
             {
                 UpdateHeroRecords(clanHeroes);
+                heroRecordsUpdated = true;
             }
             if (!formations.IsEmpty())
             {
                 UpdateArmyRecords(formations, enemyKills, allyCasualties);
+                armyRecordsUpdated = true;
+            }
+
+            LogCapture("CaptureResult: Heroes=" + clanHeroes.Count +
+                ", Infantry=" + infantry.Count +
+                ", Ranged=" + ranged.Count +
+                ", Cavalry=" + cavalry.Count +
+                ", HorseArchers=" + horseArchers.Count +
+                ", HeroRecordsUpdated=" + heroRecordsUpdated +
+                ", ArmyRecordsUpdated=" + armyRecordsUpdated +
+                ", HeroRecordsTotal=" + heroRecords.Count +
+                ", ArmyRecordsTotal=" + armyRecords.Count);
+
+            return true;
+        }
+
+        private static bool TryResolveScoreboardSides(ScoreboardBaseVM scoreboard, out SPScoreboardSideVM playerSideVm, out SPScoreboardSideVM enemySideVm, out BattleSideEnum playerSide)
+        {
+            playerSideVm = null;
+            enemySideVm = null;
+            playerSide = BattleSideEnum.None;
+
+            if (scoreboard == null || PartyBase.MainParty == null)
+            {
+                return false;
+            }
+
+            playerSide = PartyBase.MainParty.Side;
+            if (playerSide == BattleSideEnum.Attacker)
+            {
+                playerSideVm = scoreboard.Attackers;
+                enemySideVm = scoreboard.Defenders;
+                return true;
+            }
+
+            if (playerSide == BattleSideEnum.Defender)
+            {
+                playerSideVm = scoreboard.Defenders;
+                enemySideVm = scoreboard.Attackers;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryGetPlayerScoreboardParty(IEnumerable<SPScoreboardPartyVM> parties, out SPScoreboardPartyVM playerParty)
+        {
+            playerParty = null;
+            if (parties == null)
+            {
+                return false;
+            }
+
+            PartyBase mainParty = PartyBase.MainParty;
+            Hero mainHero = Hero.MainHero;
+            Clan mainClan = mainHero != null ? mainHero.Clan : null;
+
+            // Prefer direct party identity checks when available.
+            foreach (SPScoreboardPartyVM party in parties)
+            {
+                PartyBase partyBase = party != null ? party.BattleCombatant as PartyBase : null;
+                if (partyBase == null || mainParty == null)
+                {
+                    continue;
+                }
+
+                if (object.ReferenceEquals(partyBase, mainParty))
+                {
+                    playerParty = party;
+                    return true;
+                }
+
+                if (partyBase.MobileParty != null && partyBase.MobileParty.IsMainParty)
+                {
+                    playerParty = party;
+                    return true;
+                }
+
+                if (mainParty.MobileParty != null && object.ReferenceEquals(partyBase.MobileParty, mainParty.MobileParty))
+                {
+                    playerParty = party;
+                    return true;
+                }
+            }
+
+            // Fallback to hero/clan ownership when direct identity isn't exposed.
+            foreach (SPScoreboardPartyVM party in parties)
+            {
+                PartyBase partyBase = party != null ? party.BattleCombatant as PartyBase : null;
+                if (partyBase == null)
+                {
+                    continue;
+                }
+
+                if (mainHero != null && (partyBase.LeaderHero == mainHero || partyBase.Owner == mainHero))
+                {
+                    playerParty = party;
+                    return true;
+                }
+
+                if (mainClan != null &&
+                    ((partyBase.LeaderHero != null && partyBase.LeaderHero.Clan == mainClan) ||
+                     (partyBase.Owner != null && partyBase.Owner.Clan == mainClan)))
+                {
+                    playerParty = party;
+                    return true;
+                }
+            }
+
+            // Semantic fallback by faction + party name.
+            foreach (SPScoreboardPartyVM party in parties)
+            {
+                PartyBase partyBase = party != null ? party.BattleCombatant as PartyBase : null;
+                if (partyBase == null || mainParty == null || partyBase.MapFaction == null || mainParty.MapFaction == null)
+                {
+                    continue;
+                }
+
+                if (partyBase.MapFaction == mainParty.MapFaction)
+                {
+                    string partyName = partyBase.Name != null ? partyBase.Name.ToString() : string.Empty;
+                    string mainPartyName = mainParty.Name != null ? mainParty.Name.ToString() : string.Empty;
+                    if (!string.IsNullOrWhiteSpace(partyName) && partyName.Equals(mainPartyName, StringComparison.Ordinal))
+                    {
+                        playerParty = party;
+                        return true;
+                    }
+                }
+            }
+
+            // Last-resort fallback keeps the previous banner match behavior as backup only.
+            foreach (SPScoreboardPartyVM party in parties)
+            {
+                if (party != null && party.BattleCombatant != null && mainHero != null && party.BattleCombatant.Banner == mainHero.ClanBanner)
+                {
+                    playerParty = party;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static int GetPartyCount(SPScoreboardSideVM side)
+        {
+            return side != null && side.Parties != null ? side.Parties.Count : 0;
+        }
+
+        private static string ResolveCaptureLogFile()
+        {
+            try
+            {
+                string moduleDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+                if (!string.IsNullOrWhiteSpace(moduleDirectory))
+                {
+                    return Path.Combine(moduleDirectory, "BattleStats_capture.log");
+                }
+            }
+            catch
+            {
+            }
+
+            return CaptureLogFallbackFile;
+        }
+
+        private static void LogCapture(string message)
+        {
+            if (!CaptureLoggingEnabled)
+            {
+                return;
+            }
+
+            string line = "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff") + "] " + message + Environment.NewLine;
+            if (TryAppendLine(CaptureLogFile, line))
+            {
+                return;
+            }
+
+            TryAppendLine(CaptureLogFallbackFile, line);
+        }
+
+        private static bool TryAppendLine(string path, string line)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            try
+            {
+                string directory = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                File.AppendAllText(path, line);
+                return true;
+            }
+            catch (IOException)
+            {
+                return false;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return false;
             }
         }
 
