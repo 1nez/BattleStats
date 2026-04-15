@@ -177,6 +177,7 @@ namespace BattleStats
             int playerPartyMemberCount = playerParty.Members != null ? playerParty.Members.Count : 0;
             LogCapture("PlayerPartyFound=true, MemberCount=" + playerPartyMemberCount + ", EnemyKills=" + enemyKills + ", AllyCasualties=" + allyCasualties);
 
+            bool skippedMainHeroSimulationStats = false;
             if (playerParty.Members != null)
             {
                 foreach (SPScoreboardUnitVM troop in playerParty.Members)
@@ -188,6 +189,12 @@ namespace BattleStats
 
                     if (troop.IsHero)
                     {
+                        if (scoreboard.IsSimulation && troop.Score != null && troop.Score.IsMainHero)
+                        {
+                            skippedMainHeroSimulationStats = true;
+                            continue;
+                        }
+
                         clanHeroes.Add(troop);
                     }
                     else if (troop.Character != null)
@@ -248,6 +255,7 @@ namespace BattleStats
                 ", Ranged=" + ranged.Count +
                 ", Cavalry=" + cavalry.Count +
                 ", HorseArchers=" + horseArchers.Count +
+                ", SkippedMainHeroSimulationStats=" + skippedMainHeroSimulationStats +
                 ", HeroRecordsUpdated=" + heroRecordsUpdated +
                 ", ArmyRecordsUpdated=" + armyRecordsUpdated +
                 ", HeroRecordsTotal=" + heroRecords.Count +
